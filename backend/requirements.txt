@@ -1,0 +1,13 @@
+fastapi==0.111.0      # Web framework for APIs  
+uvicorn[standard]==0.29.0  # Runs FastAPI  
+pymongo==4.7.2        # Connects to MongoDB  
+motor==3.4.0          # Asynchronous MongoDB driver  
+pydantic==2.7.1       # Validates data formats  
+python-dotenv==1.0.1  # Loads .env file  
+openai==1.30.1        # Calls OpenAI API  
+faiss-cpu==1.8.0      # AI library for similarity searches  
+celery==5.4.0         # Background task queue  
+redis==5.0.4          # In-memory cache  
+python-multipart==0.0.9  # Handles file uploads  
+numpy==1.26.4         # Scientific computing library  
+httpx==0.27.0         # Async HTTP client  
