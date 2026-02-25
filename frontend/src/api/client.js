@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const api = axios.create({ baseURL: BASE_URL });
 
@@ -10,7 +10,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * @param {Function} onProgress - Callback for upload progress (0-100)
  * @returns {Promise} Response data with jobId
  */
-export async function uploadLog(file, onProgress = () => {}) {
+export async function uploadLog(file, onProgress = () => { }) {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -63,7 +63,7 @@ export async function getAnalytics() {
  * @param {Function} onToken - Callback for each token received
  * @param {Function} onComplete - Callback when stream is done
  */
-export async function askAI(query, logIds = [], onToken = () => {}, onComplete = () => {}) {
+export async function askAI(query, logIds = [], onToken = () => { }, onComplete = () => { }) {
   const payload = { query, log_ids: logIds };
 
   try {
