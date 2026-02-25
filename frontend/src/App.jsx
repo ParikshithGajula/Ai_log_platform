@@ -57,9 +57,13 @@ export default function App() {
 
   // On mount: fetch initial data and set up auto-refresh
   useEffect(() => {
-    fetchAnalytics();
-    fetchLogs(1);
-    checkHealth();
+    const init = async () => {
+      await fetchAnalytics();
+      await fetchLogs(1);
+      await checkHealth();
+    };
+
+    init();
 
     // Auto-refresh analytics every 30 seconds
     analyticsIntervalRef.current = setInterval(() => {
@@ -72,6 +76,7 @@ export default function App() {
         clearInterval(analyticsIntervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle uploader completion
@@ -123,8 +128,8 @@ export default function App() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-3 border-b-2 transition ${activeTab === tab.id
-                    ? 'border-accent text-accent font-semibold'
-                    : 'border-transparent text-muted hover:text-text'
+                  ? 'border-accent text-accent font-semibold'
+                  : 'border-transparent text-muted hover:text-text'
                   }`}
               >
                 {tab.label}

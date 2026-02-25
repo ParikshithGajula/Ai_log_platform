@@ -11,3 +11,17 @@
   --color-warn: #f59e0b;
   --color-success: #22c55e;
 }
+
+@layer base {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #21262d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #00d4ff;
+    --error: #ef4444;
+    --warn: #f59e0b;
+    --success: #22c55e;
+  }
+}

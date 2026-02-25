@@ -9,13 +9,12 @@ export default function AskAI() {
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [tokens, setTokens] = useState([]);
+  // const [tokens, setTokens] = useState([]);
 
   const handleAsk = async () => {
     if (!query.trim()) return;
 
     setIsStreaming(true);
-    setTokens([]);
     setResponse('');
 
     const tokenBuffer = [];
@@ -25,7 +24,6 @@ export default function AskAI() {
       [],
       (token) => {
         tokenBuffer.push(token);
-        setTokens([...tokenBuffer]);
         setResponse(tokenBuffer.join(''));
       },
       (result) => {
@@ -47,7 +45,6 @@ export default function AskAI() {
   const handleClear = () => {
     setQuery('');
     setResponse('');
-    setTokens([]);
   };
 
   // Parse response as structured data if possible
@@ -124,13 +121,12 @@ export default function AskAI() {
                 <div>
                   <span className="font-semibold text-text">Confidence:</span>
                   <span
-                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
-                      parsed.confidence === 'HIGH'
+                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${parsed.confidence === 'HIGH'
                         ? 'bg-green-900 text-green-200'
                         : parsed.confidence === 'MEDIUM'
-                        ? 'bg-yellow-900 text-yellow-200'
-                        : 'bg-red-900 text-red-200'
-                    }`}
+                          ? 'bg-yellow-900 text-yellow-200'
+                          : 'bg-red-900 text-red-200'
+                      }`}
                   >
                     {parsed.confidence}
                   </span>
@@ -141,13 +137,12 @@ export default function AskAI() {
                 <div>
                   <span className="font-semibold text-text">Severity:</span>
                   <span
-                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
-                      parsed.severity === 'CRITICAL'
+                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${parsed.severity === 'CRITICAL'
                         ? 'bg-red-900 text-red-200'
                         : parsed.severity === 'HIGH'
-                        ? 'bg-orange-900 text-orange-200'
-                        : 'bg-yellow-900 text-yellow-200'
-                    }`}
+                          ? 'bg-orange-900 text-orange-200'
+                          : 'bg-yellow-900 text-yellow-200'
+                      }`}
                   >
                     {parsed.severity}
                   </span>

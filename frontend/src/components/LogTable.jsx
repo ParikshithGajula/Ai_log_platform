@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 /**
  * Key React Concept: Controlled components — all filter values live in 
@@ -6,11 +6,10 @@ import React, { useState, useEffect } from 'react';
  */
 export default function LogTable({
   logs = [],
-  total = 0,
   page = 1,
   pages = 1,
-  onFilterChange = () => {},
-  onPageChange = () => {},
+  onFilterChange = () => { },
+  onPageChange = () => { },
 }) {
   const [filters, setFilters] = useState({
     service: '',
