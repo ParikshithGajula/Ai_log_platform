@@ -5,8 +5,9 @@ services:
   - type: web
     name: ai-log-platform-backend
     env: python
-    buildCommand: "cd backend && pip install -r requirements.txt"
-    startCommand: "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -31,8 +32,9 @@ services:
   - type: worker
     name: ai-log-platform-worker
     env: python
-    buildCommand: "cd backend && pip install -r requirements.txt"
-    startCommand: "cd backend && celery -A celery_worker worker --loglevel=info"
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A celery_worker worker --loglevel=info"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
