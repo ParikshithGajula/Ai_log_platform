@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Log Platform - Sample Output</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(0,212,255,0.1));
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #10b981, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+
+        .section {
+            margin-bottom: 3rem;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            color: #f1f5f9;
+        }
+
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(16,185,129,0.5);
+            box-shadow: 0 0 20px rgba(16,185,129,0.1);
+            transform: translateY(-2px);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            font-family: 'Monaco', monospace;
+            color: #10b981;
+            margin-bottom: 1rem;
+        }
+
+        .stat-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .stat-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #00d4ff);
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .chart-container {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart {
+            width: 100%;
+            height: 300px;
+            background: linear-gradient(180deg, rgba(16,185,129,0.1), rgba(15,23,42,0));
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bars {
+            display: flex;
+            align-items: flex-end;
+            height: 100%;
+            gap: 1rem;
+            padding: 2rem 1rem;
+        }
+
+        .bar {
+            flex: 1;
+            background: linear-gradient(180deg, #10b981, #059669);
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            min-height: 20px;
+            box-shadow: 0 0 10px rgba(16,185,129,0.3);
+        }
+
+        .bar-label {
+            position: absolute;
+            bottom: -2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            color: #64748b;
+            white-space: nowrap;
+        }
+
+        .table-container {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: rgba(255,255,255,0.02);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #cbd5e1;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        tr:hover {
+            background: rgba(16,185,129,0.05);
+        }
+
+        .timestamp {
+            font-family: 'Monaco', monospace;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-error {
+            background: rgba(244,63,94,0.1);
+            color: #f43f5e;
+            border: 1px solid rgba(244,63,94,0.3);
+        }
+
+        .badge-warn {
+            background: rgba(245,158,11,0.1);
+            color: #f59e0b;
+            border: 1px solid rgba(245,158,11,0.3);
+        }
+
+        .badge-critical {
+            background: rgba(239,68,68,0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239,68,68,0.3);
+        }
+
+        .badge-info {
+            background: rgba(16,185,129,0.1);
+            color: #10b981;
+            border: 1px solid rgba(16,185,129,0.3);
+        }
+
+        .service-name {
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .message {
+            color: #cbd5e1;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .anomaly-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .anomaly-meter {
+            width: 80px;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .anomaly-fill {
+            height: 100%;
+            transition: all 0.3s ease;
+            border-radius: 3px;
+        }
+
+        .anomaly-fill.low {
+            background: linear-gradient(90deg, #10b981, #059669);
+            box-shadow: 0 0 8px rgba(16,185,129,0.5);
+        }
+
+        .anomaly-fill.medium {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            box-shadow: 0 0 8px rgba(245,158,11,0.5);
+        }
+
+        .anomaly-fill.high {
+            background: linear-gradient(90deg, #f43f5e, #e11d48);
+            box-shadow: 0 0 8px rgba(244,63,94,0.5);
+        }
+
+        .anomaly-score {
+            font-family: 'Monaco', monospace;
+            font-size: 0.8rem;
+            color: #64748b;
+            min-width: 35px;
+        }
+
+        .ai-analysis {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .analysis-item {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .analysis-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.75rem;
+        }
+
+        .analysis-content {
+            color: #e2e8f0;
+            line-height: 1.7;
+        }
+
+        .confidence-high {
+            color: #10b981;
+        }
+
+        .severity-critical {
+            color: #ef4444;
+        }
+
+        .severity-high {
+            color: #f43f5e;
+        }
+
+        .code-block {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+        }
+
+        .code-block code {
+            font-family: 'Monaco', monospace;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+            line-height: 1.8;
+        }
+
+        .highlight {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .footer {
+            text-align: center;
+            color: #64748b;
+            padding: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        @media (max-width: 768px) {
+            .stat-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .analysis-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            table {
+                font-size: 0.85rem;
+            }
+
+            td, th {
+                padding: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ AI Log Platform</h1>
+            <p class="subtitle">Intelligent Observability & Root Cause Analysis</p>
+        </header>
+
+        <!-- Analytics Dashboard -->
+        <div class="section">
+            <div class="section-title">Analytics Dashboard</div>
+
+            <div class="stat-cards">
+                <div class="stat-card">
+                    <div class="stat-label">📊 Logs Processed</div>
+                    <div class="stat-value">500</div>
+                    <div class="stat-bar">
+                        <div class="stat-bar-fill" style="width: 85%;"></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">❌ Error Events</div>
+                    <div class="stat-value">100</div>
+                    <div class="stat-bar">
+                        <div class="stat-bar-fill" style="width: 65%;"></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">⚠️ Anomalies</div>
+                    <div class="stat-value">15</div>
+                    <div class="stat-bar">
+                        <div class="stat-bar-fill" style="width: 45%;"></div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">📈 Failure Rate</div>
+                    <div class="stat-value">20.0%</div>
+                    <div class="stat-bar">
+                        <div class="stat-bar-fill" style="width: 55%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Frequency Chart -->
+        <div class="section">
+            <div class="section-title">Log Frequency Trends (Last 12 Hours)</div>
+
+            <div class="chart-container">
+                <div class="chart">
+                    <div class="bars">
+                        <div class="bar" style="height: 45%;"><span class="bar-label">10 AM</span></div>
+                        <div class="bar" style="height: 52%;"><span class="bar-label">11 AM</span></div>
+                        <div class="bar" style="height: 38%;"><span class="bar-label">12 PM</span></div>
+                        <div class="bar" style="height: 61%;"><span class="bar-label">1 PM</span></div>
+                        <div class="bar" style="height: 72%;"><span class="bar-label">2 PM</span></div>
+                        <div class="bar" style="height: 55%;"><span class="bar-label">3 PM</span></div>
+                        <div class="bar" style="height: 48%;"><span class="bar-label">4 PM</span></div>
+                        <div class="bar" style="height: 65%;"><span class="bar-label">5 PM</span></div>
+                        <div class="bar" style="height: 42%;"><span class="bar-label">6 PM</span></div>
+                        <div class="bar" style="height: 58%;"><span class="bar-label">7 PM</span></div>
+                        <div class="bar" style="height: 50%;"><span class="bar-label">8 PM</span></div>
+                        <div class="bar" style="height: 68%;"><span class="bar-label">9 PM</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Table -->
+        <div class="section">
+            <div class="section-title">Log Monitor - Detailed Entries</div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Level</th>
+                            <th>Service</th>
+                            <th>Message</th>
+                            <th>Anomaly Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:00:00</td>
+                            <td><span class="badge badge-info">INFO</span></td>
+                            <td class="service-name">Auth-Service</td>
+                            <td class="message">Starting service on port 5000</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill low" style="width: 5%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">0.0</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:05:12</td>
+                            <td><span class="badge badge-error">ERROR</span></td>
+                            <td class="service-name">Auth-Service</td>
+                            <td class="message">Connection to Redis failed! Error: timeout</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill high" style="width: 85%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">8.5</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:05:22</td>
+                            <td><span class="badge badge-critical">CRITICAL</span></td>
+                            <td class="service-name">Auth-Service</td>
+                            <td class="message">Service shutting down due to Redis failure</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill high" style="width: 95%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">9.5</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:06:00</td>
+                            <td><span class="badge badge-error">ERROR</span></td>
+                            <td class="service-name">Payment-Service</td>
+                            <td class="message">Auth-Service unreachable, returning 503</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill high" style="width: 88%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">8.8</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:06:05</td>
+                            <td><span class="badge badge-warn">WARN</span></td>
+                            <td class="service-name">Router</td>
+                            <td class="message">Dropping 245 incoming requests</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill medium" style="width: 72%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">7.2</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:10:00</td>
+                            <td><span class="badge badge-error">ERROR</span></td>
+                            <td class="service-name">Database</td>
+                            <td class="message">Too many connections from unknown IP</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill high" style="width: 78%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">7.8</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="timestamp">2026-03-01 10:12:00</td>
+                            <td><span class="badge badge-critical">FATAL</span></td>
+                            <td class="service-name">System</td>
+                            <td class="message">OOMKiller triggered. Out of memory.</td>
+                            <td>
+                                <div class="anomaly-bar">
+                                    <div class="anomaly-meter">
+                                        <div class="anomaly-fill high" style="width: 99%;"></div>
+                                    </div>
+                                    <span class="anomaly-score">9.9</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- AI Root Cause Analysis -->
+        <div class="section">
+            <div class="section-title">AI Root Cause Analysis</div>
+
+            <div class="ai-analysis">
+                <div class="analysis-grid">
+                    <div class="analysis-item">
+                        <div class="analysis-label">Root Cause</div>
+                        <div class="analysis-content">
+                            Redis connection timeout causing cascading failure across Auth-Service and Payment-Service due to connection pool exhaustion
+                        </div>
+                    </div>
+
+                    <div class="analysis-item">
+                        <div class="analysis-label">Confidence</div>
+                        <div class="analysis-content">
+                            <span class="confidence-high">HIGH</span>
+                        </div>
+                    </div>
+
+                    <div class="analysis-item">
+                        <div class="analysis-label">Severity</div>
+                        <div class="analysis-content">
+                            <span class="severity-critical">CRITICAL</span>
+                        </div>
+                    </div>
+
+                    <div class="analysis-item">
+                        <div class="analysis-label">Impact</div>
+                        <div class="analysis-content">
+                            Complete service outage affecting all payment transactions and user authentication. Network connectivity compromised.
+                        </div>
+                    </div>
+
+                    <div class="analysis-item">
+                        <div class="analysis-label">Affected Services</div>
+                        <div class="analysis-content">
+                            • Auth-Service<br>
+                            • Payment-Service<br>
+                            • Database
+                        </div>
+                    </div>
+
+                    <div class="analysis-item">
+                        <div class="analysis-label">Recommended Solutions</div>
+                        <div class="analysis-content">
+                            1. Restart Redis instance immediately<br>
+                            2. Check network connectivity to Redis<br>
+                            3. Review Redis connection pool settings<br>
+                            4. Implement circuit breaker pattern<br>
+                            5. Add health check monitoring
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sample Output from Backend -->
+        <div class="section">
+            <div class="section-title">Sample Backend API Responses</div>
+
+            <div style="margin-bottom: 2rem;">
+                <h3 style="color: #10b981; margin-bottom: 1rem; font-size: 1.1rem;">GET /analytics</h3>
+                <div class="code-block">
+                    <code>{
+  <span class="highlight">"total_logs"</span>: 500,
+  <span class="highlight">"error_count"</span>: 100,
+  <span class="highlight">"error_rate"</span>: 20.0,
+  <span class="highlight">"anomaly_count"</span>: 15,
+  <span class="highlight">"top_services"</span>: [
+    { <span class="highlight">"service"</span>: "Payment-Service", <span class="highlight">"count"</span>: 180 },
+    { <span class="highlight">"service"</span>: "Auth-Service", <span class="highlight">"count"</span>: 150 },
+    { <span class="highlight">"service"</span>: "Database", <span class="highlight">"count"</span>: 120 }
+  ],
+  <span class="highlight">"hourly_breakdown"</span>: [
+    { <span class="highlight">"hour"</span>: "10", <span class="highlight">"count"</span>: 120 },
+    { <span class="highlight">"hour"</span>: "11", <span class="highlight">"count"</span>: 95 },
+    { <span class="highlight">"hour"</span>: "12", <span class="highlight">"count"</span>: 110 }
+  ]
+}</code>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 2rem;">
+                <h3 style="color: #10b981; margin-bottom: 1rem; font-size: 1.1rem;">POST /ask-ai (Streaming Response)</h3>
+                <div class="code-block">
+                    <code><span class="highlight">// Server-Sent Events Stream</span>
+data: {<span class="highlight">"token"</span>: "Neural "}
+data: {<span class="highlight">"token"</span>: "Link "}
+data: {<span class="highlight">"token"</span>: "established. "}
+...
+data: {
+  <span class="highlight">"done"</span>: true,
+  <span class="highlight">"result"</span>: {
+    <span class="highlight">"cause"</span>: "Redis connection timeout cascade failure",
+    <span class="highlight">"confidence"</span>: "HIGH",
+    <span class="highlight">"severity"</span>: "CRITICAL",
+    <span class="highlight">"affected_services"</span>: ["Auth-Service", "Payment-Service"],
+    <span class="highlight">"solution"</span>: "Restart Redis, implement circuit breaker..."
+  }
+}</code>
+                </div>
+            </div>
+
+            <div>
+                <h3 style="color: #10b981; margin-bottom: 1rem; font-size: 1.1rem;">GET /logs (Structured Log Entries)</h3>
+                <div class="code-block">
+                    <code>{
+  <span class="highlight">"logs"</span>: [
+    {
+      <span class="highlight">"_id"</span>: "507f1f77bcf86cd799439011",
+      <span class="highlight">"timestamp"</span>: "2026-03-01T10:05:12Z",
+      <span class="highlight">"level"</span>: "ERROR",
+      <span class="highlight">"service"</span>: "Auth-Service",
+      <span class="highlight">"message"</span>: "Connection to Redis failed! Error: timeout",
+      <span class="highlight">"anomaly_score"</span>: 0.85,
+      <span class="highlight">"host"</span>: "prod-server-1",
+      <span class="highlight">"raw_line"</span>: "[2026-03-01T10:05:12Z] [ERROR] Auth-Service..."
+    }
+  ],
+  <span class="highlight">"total"</span>: 500,
+  <span class="highlight">"page"</span>: 1,
+  <span class="highlight">"pages"</span>: 50
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This demo shows the complete output pipeline: Log ingestion → Parsing → Anomaly Detection → AI Analysis → Interactive Dashboard</p>
+        </div>
+    </div>
+</body>
+</html>
