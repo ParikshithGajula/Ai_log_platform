@@ -44,6 +44,7 @@ def _cors_origins() -> list:
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://parikshithgajula.github.io",
         "https://shanmukha-3283.github.io",
     ]
     extra = os.getenv("CORS_EXTRA_ORIGINS", "")
