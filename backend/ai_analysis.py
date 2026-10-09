@@ -1,28 +1,51 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from openai import OpenAI
-import faiss
-import numpy as np
+try:
+    from openai import AsyncOpenAI
+except ImportError:  # pragma: no cover - older openai versions
+    AsyncOpenAI = None
+try:
+    import faiss
+except ImportError:  # optional: vector search disabled if missing
+    faiss = None
+try:
+    import numpy as np
+except ImportError:
+    np = None
 import json
 
 class AIAnalyzer:
     def __init__(self):
         load_dotenv()  # Load environment variables from .env file
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self._client = None
         self.index = None
         self.id_map = {}
+
+    @property
+    def client(self):
+        # Lazy init so import/startup never crashes when key is missing
+        if self._client is None:
+            if AsyncOpenAI is None:
+                raise RuntimeError("openai package missing AsyncOpenAI")
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError("OPENAI_API_KEY is not set")
+            self._client = AsyncOpenAI(api_key=api_key, timeout=30.0)
+        return self._client
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for a list of text inputs.
         """
+        if np is None:
+            raise RuntimeError("numpy is required for embeddings")
         batches = [texts[i:i+100] for i in range(0, len(texts), 100)]
         total_batches = len(batches)
         embeddings = []
 
         for i, batch in enumerate(batches):
-            response = self.client.embeddings.create(
+            response = await self.client.embeddings.create(
                 model="text-embedding-3-small",
                 input=batch
             )
@@ -36,6 +59,8 @@ class AIAnalyzer:
         """
         Build a FAISS index for efficient similarity search.
         """
+        if faiss is None or np is None:
+            raise RuntimeError("faiss-cpu/numpy not installed; vector search disabled")
         # Create FAISS index with 1536 dimensions (matches text-embedding-3-small)
         index = faiss.IndexFlatIP(1536)
         np_array = np.array(embeddings, dtype=np.float32)
@@ -47,8 +72,10 @@ class AIAnalyzer:
         """
         Find the top k most similar log entries to the given query.
         """
+        if np is None:
+            return []
         # Generate query embedding
-        response = self.client.embeddings.create(
+        response = await self.client.embeddings.create(
             model="text-embedding-3-small",
             input=[query]
         )
@@ -69,9 +96,9 @@ class AIAnalyzer:
         Analyze logs using selected AI model to determine root cause and provide solutions.
         Supports gpt-4o, gpt-4-turbo, and gpt-3.5-turbo.
         """
-        # Format logs into a string for the model
+        # Format logs into a string for the model (truncate each to 500 chars)
         formatted_logs = "\n\n".join([
-            f"Log {i+1}:\n{log}"
+            f"Log {i+1}:\n{str(log)[:500]}"
             for i, log in enumerate(logs[:10])  # Use top 10 logs for better context
         ])
 
@@ -94,8 +121,8 @@ class AIAnalyzer:
         ]
 
         try:
-            # Call the Chat Completion API
-            response = self.client.chat.completions.create(
+            # Call the Chat Completion API (async — never blocks the event loop)
+            response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
                 response_format={ "type": "json_object" } if model in ["gpt-4o", "gpt-4-turbo"] else None,
@@ -103,9 +130,17 @@ class AIAnalyzer:
                 temperature=0.3
             )
             
-            # Parse the response
-            content = response.choices[0].message.content
-            analysis = json.loads(content)
+            # Parse the response (repair markdown-wrapped JSON for 3.5-turbo)
+            content = response.choices[0].message.content.strip()
+            try:
+                analysis = json.loads(content)
+            except json.JSONDecodeError:
+                # Strip ```json ... ``` fences if present
+                cleaned = content
+                if "```" in cleaned:
+                    cleaned = cleaned.split("```")[1] if "```" in cleaned else cleaned
+                    cleaned = cleaned.replace("json", "", 1).strip()
+                analysis = json.loads(cleaned)
         except Exception as e:
             print(f"AI Analysis error with {model}: {e}")
             analysis = {

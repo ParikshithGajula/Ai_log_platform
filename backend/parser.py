@@ -105,6 +105,38 @@ class LogParser:
         # Note: we use the status code to determine level:
         #        500+ = ERROR, 400+ = WARN, everything else = INFO
 
+    def _parse_syslog_timestamp(self, ts_str: str) -> datetime:
+        """Parse syslog 'Dec  1 03:17:44' (no year) -> datetime with current year."""
+        # Robust approach: normalize whitespace then parse with current year
+        try:
+            normalized = " ".join(ts_str.split())
+            dt = datetime.strptime(f"{datetime.now().year} {normalized}", "%Y %b %d %H:%M:%S")
+            return dt
+        except Exception:
+            return datetime.now()
+
+    def _parse_apache_timestamp(self, ts_str: str) -> datetime:
+        """Parse Apache '01/Dec/2024:03:17:44 +0000' -> datetime (drop tz for Mongo naive)."""
+        for fmt in ("%d/%b/%Y:%H:%M:%S %z", "%d/%b/%Y:%H:%M:%S"):
+            try:
+                dt = datetime.strptime(ts_str, fmt)
+                return dt.replace(tzinfo=None)
+            except Exception:
+                continue
+        return datetime.now()
+
+    @staticmethod
+    def _level_from_message(message: str) -> str:
+        upper = message.upper()
+        # Order matters: ERROR/CRITICAL/FATAL first
+        if any(k in upper for k in ("ERROR", "CRIT", "FATAL", "EXCEPTION", "FAILED", "TIMEOUT")):
+            return "ERROR"
+        if any(k in upper for k in ("WARN", "RETRY", "SLOW", "HIGH", "DEGRAD")):
+            return "WARN"
+        if "DEBUG" in upper:
+            return "DEBUG"
+        return "INFO"
+
     def parse_line(self, raw_line: str) -> dict:
         # Try patterns in the exact order specified: 1 → 2 → 3 → 4
         m = self.pattern1.match(raw_line)
@@ -128,10 +160,10 @@ class LogParser:
 
         m = self.pattern2.match(raw_line)
         if m:
-            timestamp = datetime.now()
-            level = "INFO"
-            service = m.group(3)
+            timestamp = self._parse_syslog_timestamp(m.group(1))
             message = m.group(4).strip()
+            level = self._level_from_message(message)
+            service = m.group(3)
             host = m.group(2)
             return {
                 "timestamp": timestamp,
@@ -161,7 +193,7 @@ class LogParser:
 
         m = self.pattern4.match(raw_line)
         if m:
-            timestamp = datetime.now()
+            timestamp = self._parse_apache_timestamp(m.group(2))
             status = int(m.group(5))
             level = "ERROR" if status >= 500 else "WARN" if status >= 400 else "INFO"
             service = "web-server"

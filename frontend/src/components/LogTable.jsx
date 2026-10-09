@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 export default function LogTable({
   logs = [],
+  total = 0,
   page = 1,
   pages = 1,
   onFilterChange = () => { },
@@ -10,13 +11,17 @@ export default function LogTable({
   const [filters, setFilters] = useState({
     service: '',
     level: '',
-    anomaly_threshold: 0.5,
+    min_anomaly_score: 0,
     search: '',
   });
   const [expandedRow, setExpandedRow] = useState(null);
 
   const handleFilterChange = (name, value) => {
-    const newFilters = { ...filters, [name]: value };
+    // Backwards-compat: old slider used `anomaly_threshold`
+    const key = name === 'anomaly_threshold' ? 'min_anomaly_score' : name;
+    const newFilters = { ...filters, [key]: value };
+    // Keep legacy key in sync so older backends still filter
+    if (key === 'min_anomaly_score') newFilters.anomaly_threshold = value;
     setFilters(newFilters);
     onFilterChange(newFilters);
   };
@@ -77,15 +82,15 @@ export default function LogTable({
         <div className="space-y-2">
           <div className="flex justify-between items-center pl-1">
             <label className="text-[10px] font-bold text-muted uppercase tracking-widest">Anomaly Sensitivity</label>
-            <span className="text-[10px] font-mono text-accent">{filters.anomaly_threshold.toFixed(1)}</span>
+            <span className="text-[10px] font-mono text-accent">{Number(filters.min_anomaly_score ?? 0).toFixed(1)}</span>
           </div>
           <input
             type="range"
             min="0"
             max="1"
             step="0.1"
-            value={filters.anomaly_threshold}
-            onChange={(e) => handleFilterChange('anomaly_threshold', parseFloat(e.target.value))}
+            value={filters.min_anomaly_score ?? 0}
+            onChange={(e) => handleFilterChange('min_anomaly_score', parseFloat(e.target.value))}
             className="w-full mt-3 h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-accent"
           />
         </div>
@@ -141,8 +146,8 @@ export default function LogTable({
                             style={{ width: `${((log.anomaly_score || 0) * 100).toFixed(0)}%` }}
                           />
                         </div>
-                        <span className="text-[10px] font-mono font-bold text-muted w-8">
-                          {((log.anomaly_score || 0) * 10).toFixed(1)}
+                        <span className="text-[10px] font-mono font-bold text-muted w-12 text-right">
+                          {((log.anomaly_score || 0) * 100).toFixed(0)}%
                         </span>
                       </div>
                     </td>

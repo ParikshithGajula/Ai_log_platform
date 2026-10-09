@@ -150,7 +150,7 @@ export default function App() {
             <StatCards analytics={analytics} />
             <div className="glass-card">
               <h2 className="text-lg font-bold mb-6">Log Frequency Trends</h2>
-              <AnomalyChart data={analytics.hourly_data || []} />
+              <AnomalyChart data={analytics.hourly_breakdown || analytics.hourly_data || []} />
             </div>
           </div>
         )}

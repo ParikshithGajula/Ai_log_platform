@@ -22,6 +22,7 @@ import sys
 import json
 import time
 import random
+import tempfile
 import requests
 from datetime import datetime, timedelta
 
@@ -33,7 +34,11 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 # ─────────────────────────────────────────────────────────────
 # STEP 1 — GENERATE REALISTIC 500-LINE LOG FILE
 # ─────────────────────────────────────────────────────────────
-def generate_log_file(path="/tmp/integration_test.log"):
+def generate_log_file(path=None):
+    """Create realistic log file (Windows-safe default via tempfile)."""
+    if path is None:
+        fd, path = tempfile.mkstemp(prefix="integration_test_", suffix=".log")
+        os.close(fd)
     """
     Creates a realistic mixed log file:
       300 INFO  — normal traffic across 3 services (last 6 hours)

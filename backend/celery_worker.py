@@ -21,20 +21,37 @@ celery_app = Celery(
 )
 
 # ─────────────────────────────────────────────────────────────
-# MongoDB — use MONGODB_URL or MONGO_URI (both are checked)
+# MongoDB — MONGO_URI primary, MONGODB_URL/MONGODB_URI fallbacks
+# (matches database.py + render.yaml + .env.example)
 # ─────────────────────────────────────────────────────────────
-_mongo_uri = os.getenv("MONGODB_URL", os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
-client = MongoClient(_mongo_uri)
+def _mongo_uri() -> str:
+    import os as _os
+    return (
+        _os.getenv("MONGO_URI")
+        or _os.getenv("MONGODB_URL")
+        or _os.getenv("MONGODB_URI")
+        or "mongodb://localhost:27017/"
+    )
+
+
+client = MongoClient(_mongo_uri())
 db = client["log_platform"]
 
 
-@celery_app.task(name="process_log_file")
-def process_log_file(job_id: str, content: str, filename: str):
+@celery_app.task(name="process_log_file", bind=True, max_retries=2, time_limit=600)
+def process_log_file(self, job_id: str, content: str, filename: str):
     """
     Background task: parse → detect anomalies → store results in MongoDB.
     This runs inside the Celery worker container, NOT in the web server.
     """
     try:
+        # Mark processing so the frontend stops showing "queued" forever
+        db.jobs.update_one({"job_id": job_id}, {"$set": {"status": "processing"}})
+
+        # Guard: refuse absurd payloads through the broker (10MB cap)
+        if content and len(content) > 10 * 1024 * 1024:
+            raise ValueError("Log content exceeds 10MB worker limit")
+
         # ── 1. Parse log lines ──────────────────────────────────
         parser = LogParser()
         # content is a str (decoded by the API before handing to Celery)
@@ -45,13 +62,16 @@ def process_log_file(job_id: str, content: str, filename: str):
         detector = AnomalyDetector()
         try:
             scored_logs = detector.compute_anomaly_score(parsed_logs)
-        except Exception:
-            # If scoring fails, still store the parsed logs without scores
+        except Exception as e:
+            print(f"Anomaly scoring failed ({e}); storing parsed logs without scores")
+            for log in parsed_logs:
+                log.setdefault("anomaly_score", 0.0)
             scored_logs = parsed_logs
 
-        # ── 3. Store each log entry in MongoDB ────────────────
+        # ── 3. Store each log entry in MongoDB (batched) ──────
         if scored_logs:
-            db.logs.insert_many(scored_logs)
+            for i in range(0, len(scored_logs), 1000):
+                db.logs.insert_many(scored_logs[i:i + 1000], ordered=False)
 
         # ── 4. Mark job completed ─────────────────────────────
         db.jobs.update_one(

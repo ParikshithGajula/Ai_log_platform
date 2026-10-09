@@ -1,60 +1,83 @@
-from fastapi import FastAPI, UploadFile, File, Path, Query, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, UploadFile, File, Path, Query, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import os
+import uuid
 import json
 import asyncio
+import logging
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from bson import ObjectId
-from typing import List, Optional, Dict, Any
+from bson.errors import InvalidId
+from typing import List, Optional
 from ai_analysis import AIAnalyzer
 from database import db, init_db
 
 load_dotenv()
+logger = logging.getLogger("ai_log_platform")
 
-# Initialize AI Analyzer
+# Lazy AI analyzer — never crashes import when OPENAI_API_KEY is missing
 ai_analyzer = AIAnalyzer()
 
 def serialize_doc(doc: dict) -> dict:
-    """Convert MongoDB document to JSON-serializable dict (ObjectId → str)."""
+    """Convert MongoDB document to JSON-serializable dict (recursive)."""
     out = {}
     for k, v in doc.items():
         if isinstance(v, ObjectId):
             out[k] = str(v)
         elif isinstance(v, datetime):
             out[k] = v.isoformat()
+        elif isinstance(v, dict):
+            out[k] = serialize_doc(v)
+        elif isinstance(v, list):
+            out[k] = [serialize_doc(i) if isinstance(i, dict) else str(i) if isinstance(i, ObjectId) else i.isoformat() if isinstance(i, datetime) else i for i in v]
         else:
             out[k] = v
     return out
 
-app = FastAPI(title="AI Log Platform")
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+def _cors_origins() -> list:
+    defaults = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://shanmukha-3283.github.io"
-    ],
+        "https://shanmukha-3283.github.io",
+    ]
+    extra = os.getenv("CORS_EXTRA_ORIGINS", "")
+    if extra:
+        defaults.extend([o.strip() for o in extra.split(",") if o.strip()])
+    # Deduplicate while preserving order
+    seen, out = set(), []
+    for o in defaults:
+        if o not in seen:
+            seen.add(o)
+            out.append(o)
+    return out
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+app = FastAPI(title="AI Log Platform", lifespan=lifespan)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    """Run core startup tasks"""
-    await init_db()
+def _logs_collection():
+    return db.db["logs"]
 
-# Reference collections through the shared database instance
-jobs_collection = db.db["jobs"]
-logs_collection = db.db["logs"]
+def _jobs_collection():
+    return db.db["jobs"]
 
 @app.get("/health")
 async def health_check():
@@ -64,7 +87,7 @@ async def health_check():
         await db.client.admin.command("ping")
         mongo_ok = True
     except Exception as e:
-        print(f"Health check error: {e}")
+        logger.warning("Health check mongo error: %s", e)
         mongo_ok = False
     
     try:
@@ -83,53 +106,55 @@ async def health_check():
         "redis": redis_ok
     }
 
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+
 @app.post("/upload-log")
 async def upload_log(file: UploadFile = File(...)):
-    """Waiter takes the bag of logs, gives customer a ticket number, passes bag to kitchen (Celery)"""
-    # Validate file
-    if not file.filename.endswith((".log", ".txt")):
+    """Queue a log file for background Celery processing."""
+    filename = file.filename or "upload.log"
+    if not filename.endswith((".log", ".txt")):
         raise HTTPException(status_code=400, detail="File must be .log or .txt")
-    
-    if file.size > 10 * 1024 * 1024:  # 10MB
-        raise HTTPException(status_code=413, detail="File size exceeds 10MB")
-    
-    # Create job
-    job_id = f"JOB-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    # Read first (UploadFile has no reliable .size); enforce limit on bytes
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File size exceeds {MAX_UPLOAD_BYTES // (1024*1024)}MB")
+
+    # Unique job id (uuid suffix avoids same-second collisions)
+    job_id = f"JOB-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
     job_data = {
         "job_id": job_id,
-        "filename": file.filename,
+        "filename": filename,
         "status": "queued",
-        "created_at": datetime.now()
+        "created_at": datetime.now(),
     }
-    
-    # Store job in MongoDB
-    jobs_collection.insert_one(job_data)
-    
-    # Process file in background
-    content = await file.read()
+
+    # Store job in MongoDB (Motor async — must await)
+    await _jobs_collection().insert_one(job_data)
+
     # NOTE: Celery .delay() is synchronous — do NOT await it
     from celery_worker import process_log_file
-    process_log_file.delay(job_id, content.decode("utf-8", errors="replace"), file.filename)
-    
+    process_log_file.delay(job_id, content.decode("utf-8", errors="replace"), filename)
+
     return {
         "job_id": job_id,
-        "filename": file.filename,
+        "filename": filename,
         "status": "queued",
         "created_at": job_data["created_at"].isoformat()
     }
 
 @app.get("/jobs/{job_id}")
 async def get_job_status(job_id: str = Path(...)):
-    """Customer checks their ticket status"""
-    job = await jobs_collection.find_one({"job_id": job_id})
+    """Poll async processing status and processed count."""
+    job = await _jobs_collection().find_one({"job_id": job_id})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+    created = job.get("created_at")
     return {
         "job_id": job["job_id"],
-        "filename": job["filename"],
-        "status": job["status"],
-        "created_at": job["created_at"].isoformat(),
+        "filename": job.get("filename", ""),
+        "status": job.get("status", "unknown"),
+        "created_at": created.isoformat() if isinstance(created, datetime) else str(created),
         "processed_count": job.get("processed_count", 0),
         "anomalies": job.get("anomalies", []),
         "error": job.get("error")
@@ -142,46 +167,57 @@ async def get_logs(
     service: Optional[str] = None,
     level: Optional[str] = None,
     min_anomaly_score: Optional[float] = None,
+    anomaly_threshold: Optional[float] = None,  # backwards-compat alias for old frontend
     search: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None
 ):
     """Query logs with filters and pagination"""
     filter_query = {}
-    
+
     # Add service filter
     if service:
         filter_query["service"] = service
-    
+
     # Add level filter
     if level:
         filter_query["level"] = level
-    
-    # Add anomaly score filter
-    if min_anomaly_score is not None:
-        filter_query["anomaly_score"] = {"$gte": min_anomaly_score}
-    
+
+    # Add anomaly score filter (support legacy alias)
+    threshold = min_anomaly_score if min_anomaly_score is not None else anomaly_threshold
+    if threshold is not None:
+        filter_query["anomaly_score"] = {"$gte": threshold}
+
     # Add search filter
     if search:
         filter_query["$text"] = {"$search": search}
-    
-    # Add time range filter
+
+    # Add time range filter (merge $gte/$lte — never overwrite)
+    time_filter = {}
     if start_time:
-        filter_query["timestamp"] = {"$gte": datetime.fromisoformat(start_time)}
+        try:
+            time_filter["$gte"] = datetime.fromisoformat(start_time)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_time; use ISO format")
     if end_time:
-        filter_query["timestamp"] = {"$lte": datetime.fromisoformat(end_time)}
-    
+        try:
+            time_filter["$lte"] = datetime.fromisoformat(end_time)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_time; use ISO format")
+    if time_filter:
+        filter_query["timestamp"] = time_filter
+
     # Pagination
     skip = (page - 1) * page_size
     limit = page_size
-    
+
     # Get total count
-    total = await logs_collection.count_documents(filter_query)
-    
+    total = await _logs_collection().count_documents(filter_query)
+
     # Get paginated results
-    cursor = logs_collection.find(filter_query).skip(skip).limit(limit).sort("timestamp", -1)
+    cursor = _logs_collection().find(filter_query).skip(skip).limit(limit).sort("timestamp", -1)
     results = await cursor.to_list(length=limit)
-    
+
     return {
         "logs": [serialize_doc(doc) for doc in results],
         "total": total,
@@ -193,53 +229,72 @@ async def get_logs(
 @app.get("/analytics")
 async def get_analytics():
     """Generate analytics about log data"""
+    now = datetime.now()
+    day_ago = now - timedelta(days=1)
+    half_day_ago = now - timedelta(hours=12)
     # Total logs (last 24 hours)
-    total_logs = await logs_collection.count_documents({
-        "timestamp": {"$gte": datetime.now() - timedelta(days=1)}
+    total_logs = await _logs_collection().count_documents({
+        "timestamp": {"$gte": day_ago}
     })
-    
+
     # Error count (level: ERROR)
-    error_count = await logs_collection.count_documents({
+    error_count = await _logs_collection().count_documents({
         "level": "ERROR",
-        "timestamp": {"$gte": datetime.now() - timedelta(days=1)}
+        "timestamp": {"$gte": day_ago}
     })
-    
+
     # Error rate
     error_rate = round(error_count / total_logs * 100, 2) if total_logs > 0 else 0
-    
+
     # Top 5 services by log count
-    top_services_cursor = logs_collection.aggregate([
-        {"$match": {"timestamp": {"$gte": datetime.now() - timedelta(days=1)}}},
+    top_services_cursor = _logs_collection().aggregate([
+        {"$match": {"timestamp": {"$gte": day_ago}}},
         {"$group": {"_id": "$service", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 5}
     ])
     top_services = await top_services_cursor.to_list(length=5)
-    
+
     # Anomalies (score >= 0.7)
-    anomaly_count = await logs_collection.count_documents({
+    anomaly_count = await _logs_collection().count_documents({
         "anomaly_score": {"$gte": 0.7},
-        "timestamp": {"$gte": datetime.now() - timedelta(days=1)}
+        "timestamp": {"$gte": day_ago}
     })
-    
-    # Hourly breakdown (last 12 hours)
-    hourly_breakdown_cursor = logs_collection.aggregate([
-        {"$match": {"timestamp": {"$gte": datetime.now() - timedelta(hours=12)}}},
+
+    # Hourly breakdown (last 12 hours) with totals + errors per bucket.
+    # Bucket id is "%Y-%m-%d %H" so days never mix; hour label stays "%H".
+    hourly_cursor = _logs_collection().aggregate([
+        {"$match": {"timestamp": {"$gte": half_day_ago}}},
         {"$group": {
-            "_id": {"$dateToString": {"format": "%H", "date": "$timestamp"}},
-            "count": {"$sum": 1}
+            "_id": {"$dateToString": {"format": "%Y-%m-%d %H", "date": "$timestamp"}},
+            "count": {"$sum": 1},
+            "errors": {"$sum": {"$cond": [{"$eq": ["$level", "ERROR"]}, 1, 0]}},
         }},
-        {"$sort": {"_id": 1}}
+        {"$sort": {"_id": 1}},
+        {"$limit": 12},
     ])
-    hourly_breakdown = await hourly_breakdown_cursor.to_list(length=12)
-    
+    hourly_raw = await hourly_cursor.to_list(length=12)
+    hourly_breakdown = [
+        {
+            "hour": b["_id"].split(" ")[1] if " " in str(b["_id"]) else str(b["_id"]),
+            "bucket": b["_id"],
+            "count": b["count"],
+            # Aliases for frontend chart compatibility
+            "total_logs": b["count"],
+            "error_count": b.get("errors", 0),
+        }
+        for b in hourly_raw
+    ]
+
     return {
         "total_logs": total_logs,
         "error_count": error_count,
         "error_rate": error_rate,
         "top_services": [{"service": service["_id"], "count": service["count"]} for service in top_services],
         "anomaly_count": anomaly_count,
-        "hourly_breakdown": [{"hour": hour["_id"], "count": hour["count"]} for hour in hourly_breakdown]
+        "hourly_breakdown": hourly_breakdown,
+        # Backwards-compat alias for older frontend (hourly_data)
+        "hourly_data": hourly_breakdown,
     }
 
 @app.post("/analyze")
@@ -265,21 +320,24 @@ async def ask_ai(request: AskAIRequest):
     log_ids = request.log_ids
     model_choice = request.model
 
+    # Validate ObjectIds before streaming (raising here returns proper 400)
+    object_ids = []
+    if log_ids:
+        try:
+            object_ids = [ObjectId(lid) for lid in log_ids]
+        except (InvalidId, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid log_ids; must be Mongo ObjectIds")
+
     async def event_stream():
         try:
             # Fetch relevant logs for context
-            filter_query = {}
-            if log_ids:
-                filter_query["_id"] = {"$in": [ObjectId(lid) for lid in log_ids]}
+            filter_query = {"_id": {"$in": object_ids}} if object_ids else {}
 
-            cursor = logs_collection.find(filter_query).sort("timestamp", -1).limit(50)
+            cursor = _logs_collection().find(filter_query).sort("timestamp", -1).limit(50)
             recent_logs = await cursor.to_list(length=50)
 
             # Build initial context
-            error_logs = [l for l in recent_logs if l.get("level") == "ERROR"]
-            warn_logs = [l for l in recent_logs if l.get("level") == "WARN"]
             services = list(set(l.get("service", "unknown") for l in recent_logs))
-            anomalies = [l for l in recent_logs if (l.get("anomaly_score", 0) or 0) >= 0.7]
 
             # Initial summary for streaming
             response_text = f"Neural Link established. Routing inquiry to {model_choice}...\n"
@@ -305,11 +363,13 @@ async def ask_ai(request: AskAIRequest):
                     "solution": analysis.get("solution", "Manual inspection required.")
                 }
             except Exception as ai_err:
-                print(f"AI error: {ai_err}")
+                logger.warning("AI error: %s", ai_err)
                 result = {
                     "cause": "AI subsystem busy or unavailable.",
                     "confidence": "LOW",
                     "severity": "HIGH",
+                    "affected_services": services[:3],
+                    "impact": "Service degradation likely.",
                     "recommendation": "Try a different model or check API quota.",
                     "solution": "Check backend .env for valid OPENAI_API_KEY."
                 }
@@ -324,9 +384,11 @@ async def ask_ai(request: AskAIRequest):
 
 @app.post("/stream")
 async def stream_logs():
-    """Stream logs in real-time"""
+    """Stream latest logs snapshot (10 docs) as SSE."""
     async def event_stream():
-        async for doc in logs_collection.find().sort("timestamp", -1).limit(10):
+        cursor = _logs_collection().find().sort("timestamp", -1).limit(10)
+        docs = await cursor.to_list(length=10)
+        for doc in docs:
             yield f"data: {json.dumps(serialize_doc(doc))}\n\n"
-    
+
     return StreamingResponse(event_stream(), media_type="text/event-stream")

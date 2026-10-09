@@ -27,15 +27,28 @@ class Database:
                 ],
                 name="service_timestamp_level_idx"
             )
-            
-            # TTL index for automatic log expiration
-            await self.db.logs.create_index(
-                [
-                    ("timestamp", ASCENDING)
-                ],
-                expireAfterSeconds=60*60*24*30,  # 30 days
-                name="ttl_timestamp_idx"
-            )
+
+            # Single-field helpers for /logs filters + /analytics
+            await self.db.logs.create_index([("timestamp", DESCENDING)], name="timestamp_desc_idx")
+            await self.db.logs.create_index([("level", ASCENDING)], name="level_idx")
+            await self.db.logs.create_index([("anomaly_score", DESCENDING)], name="anomaly_score_desc_idx")
+            await self.db.jobs.create_index([("job_id", ASCENDING)], name="job_id_unique_idx", unique=True)
+            await self.db.jobs.create_index([("status", ASCENDING)], name="job_status_idx")
+
+            # TTL index for automatic log expiration (opt-in; default keeps data)
+            # Set LOG_TTL_DAYS=30 to enable 30-day expiry.
+            import os as _os
+            ttl_days = _os.getenv("LOG_TTL_DAYS", "")
+            if ttl_days:
+                try:
+                    days = int(ttl_days)
+                    await self.db.logs.create_index(
+                        [("timestamp", ASCENDING)],
+                        expireAfterSeconds=60 * 60 * 24 * days,
+                        name="ttl_timestamp_idx",
+                    )
+                except Exception as e:
+                    print(f"Warning: TTL index skipped: {e}")
             
             # Text index for full-text search
             await self.db.logs.create_index(

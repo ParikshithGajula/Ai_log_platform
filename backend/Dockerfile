@@ -23,6 +23,10 @@ EXPOSE 8000
 # ↑ Document that this container uses port 8000.
 #   (Doesn't actually open the port — docker run does that.)
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"
+# ↑ Render + Compose use this to know when the API is ready.
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 # ↑ Command to run when container starts.
 #   --host 0.0.0.0 is required in Docker so other 

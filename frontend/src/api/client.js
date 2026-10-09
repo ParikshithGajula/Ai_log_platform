@@ -43,7 +43,18 @@ export async function getJob(jobId) {
  * @returns {Promise} Logs array and pagination info
  */
 export async function getLogs(filters = {}) {
-  const response = await api.get("/logs", { params: filters });
+  const params = {};
+  for (const [k, v] of Object.entries(filters)) {
+    if (v === '' || v === null || v === undefined) continue;
+    // Legacy slider key -> backend canonical key (backend also accepts alias)
+    if (k === 'anomaly_threshold') {
+      if (Number(v) > 0) params.min_anomaly_score = v;
+      continue;
+    }
+    if (k === 'min_anomaly_score' && Number(v) <= 0) continue;
+    params[k] = v;
+  }
+  const response = await api.get("/logs", { params });
   return response.data;
 }
 

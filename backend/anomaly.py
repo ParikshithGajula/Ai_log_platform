@@ -48,12 +48,19 @@ class AnomalyDetector:
         
         # Process each service
         for service, service_logs in services.items():
-            # Group logs into hourly buckets
+            # Group logs into (date, hour) buckets — hour-only mixes days
             hourly_buckets = defaultdict(list)
             for log in service_logs:
-                # Extract hour from timestamp
-                hour = log['timestamp'].hour
-                hourly_buckets[hour].append(log)
+                ts = log['timestamp']
+                # Accept ISO strings defensively (e.g. from Mongo round-trip)
+                if isinstance(ts, str):
+                    try:
+                        ts = datetime.fromisoformat(ts)
+                        log['timestamp'] = ts
+                    except Exception:
+                        continue
+                bucket = (ts.date().isoformat(), ts.hour)
+                hourly_buckets[bucket].append(log)
             
             # Compute error rates for each bucket
             # Note: assumes parser normalizes levels to uppercase (e.g., 'ERROR', 'WARN', 'INFO')
@@ -67,16 +74,19 @@ class AnomalyDetector:
             # Collect all error rates for the service
             error_rates = list(hour_to_error_rate.values())
             
-            # Compute mean and standard deviation
-            # Design note: grouping by hour only mixes patterns across days (e.g., Mon 3am with Fri 3am).
-            # For daily patterns, consider using (date, hour) tuples instead.
+            # Compute mean and standard deviation over (date, hour) buckets.
             if not error_rates:
                 # No logs with this service in this batch — skip
                 continue
             
             if len(error_rates) < 2:
-                mean = error_rates[0]
-                std = 0.0
+                # Single-bucket batch (e.g. all logs share one hour):
+                # fall back to global error rate so spikes still score.
+                # A bucket that is 100% errors with a healthy global rate => anomaly.
+                global_errors = sum(1 for l in service_logs if l['level'] == 'ERROR')
+                global_rate = global_errors / len(service_logs) if service_logs else 0.0
+                mean = global_rate * 0.5  # baseline below observed spike
+                std = max(global_rate * 0.5, 0.1)
             else:
                 try:
                     mean = statistics.mean(error_rates)
@@ -87,8 +97,9 @@ class AnomalyDetector:
             
             # Now, compute score for each log in service_logs
             for log in service_logs:
-                hour = log['timestamp'].hour
-                error_rate = hour_to_error_rate[hour]
+                ts = log['timestamp']
+                bucket = (ts.date().isoformat(), ts.hour) if isinstance(ts, datetime) else None
+                error_rate = hour_to_error_rate.get(bucket, 0.0)
                 
                 # Compute Z-score: how many standard deviations from the mean
                 denominator = std + self.MIN_STD_OFFSET
